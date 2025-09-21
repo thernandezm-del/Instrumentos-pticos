@@ -42,7 +42,7 @@ def z_limit(N: int, dx: float, wavelength: float) -> float:
     return (N//2) * (dx**2) / wavelength
 
 # --------------------------- Parámetros ---------------------------
-wavelength     = 533e-9      # λ [m]
+wavelength     = 544e-9      # λ [m]
 N              = 512         # muestras por eje (vista NxN)
 dx             = 5e-6        # paso espacial Δx [m/píxel]
 aperture_width = 200e-6      # lado del cuadrado [m]
