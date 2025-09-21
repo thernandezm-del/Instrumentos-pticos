@@ -107,3 +107,4 @@ print(f"Δf = 1/(N·dx) = {1.0/(N*dx):.3e} ciclos/m,  M=N/2={N//2}")
 print(f"z_max = M·dx²/λ = {z_max:.3e} m  ({z_max*1e3:.3f} mm)")
 
 plt.show()
+#damon estuvo aqu
