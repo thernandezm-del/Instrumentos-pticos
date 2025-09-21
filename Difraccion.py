@@ -1,63 +1,41 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
 
 # ======================================================================
 # CONFIGURACIÓN — modifica aquí tus parámetros principales
 # ======================================================================
-z_max_m  = 200
-N                   = 2048        # [muestras] por eje (malla cuadrada N×N)
-dx                  = 13e-6       # [m/píxel] paso espacial en el plano de la abertura
-longitud_onda_m     = 532e-9     # [m] λ (ej. 544 nm; usa 532e-9 si es 532 nm)
-freq=1/longitud_onda_m
-lado_abertura_m     = 300e-6     # [m] lado del cuadrado de la abertura
-centro_abertura_m   = (0.0, 0.0) # [m] (x0, y0) del centro de la abertura
-amplitud_interior   = 1.0 + 0.0j # valor COMPLEJO dentro de la abertura (puede llevar fase)
-fraccion_z_de_zmax  = 0.4   # z = fracción * z_max (guía práctica)
-mostrar_abertura    = True       # dibujar la abertura (z=0) además de la intensidad en z
+z_max_m  = 200                 # [m] tope deseado del slider (se limita por z_max_recomendado)
+N                   = 2048
+dx                  = 13e-6    # [m/píxel]
+longitud_onda_m     = 532e-9   # [m]
+lado_abertura_m     = 100e-6   # [m]
+centro_abertura_m   = (0.0, 0.0)
+amplitud_interior   = 1.0 + 0.0j
+fraccion_z_de_zmax  = 0.4      # z inicial = fracción * z_max_slider
+mostrar_abertura    = True
+
+# NUEVO: controles de visualización
+zoom_vista          = 3.0      # >1: acerca la vista (3× recomendado para z pequeños)
+usar_escala_log     = True     # True -> mostrar 10*log10(I/Imax)
+rango_dB            = 40.0     # dinámica para la vista log: [-rango_dB, 0] dB
 # ======================================================================
 
-# ----------------------------------------------------------------------
-# PARTE 1 — Malla espacial (x, y) y rejilla 2D (X, Y)
-# Convenciones:
-#   - x, y: vectores 1D (metros), centrados en 0
-#   - X, Y: mallas 2D (metros), para evaluar U(x,y) en la rejilla
-# ----------------------------------------------------------------------
-Lx = N * dx   # [m] tamaño físico en x (solo informativo)
-Ly = N * dx   # [m] tamaño físico en y (cuadrada)
+# --------------------------- Malla espacial ----------------------------
+Lx = N * dx
+Ly = N * dx
+x = (np.arange(N) - N//2) * dx
+y = (np.arange(N) - N//2) * dx
+X, Y = np.meshgrid(x, y, indexing="xy")
 
-# Vectores 1D (centrados en 0). Para N PAR, 0 cae en el índice N//2.
-x = (np.arange(N) - N//2) * dx   # [m]
-y = (np.arange(N) - N//2) * dx   # [m]
-
-# Mallas 2D
-X, Y = np.meshgrid(x, y, indexing="xy")  # shape (N, N)
-
-# ----------------------------------------------------------------------
-# PARTE 2 — Malla de frecuencias (fx, fy) y rejilla 2D (FX, FY)
-# Hechos de muestreo:
-#   Δf = 1/(N·dx)       (resolución en frecuencia)
-#   f_max = 1/(2·dx)    (Nyquist)
-# Usamos fftshift para centrar f=0.
-# ----------------------------------------------------------------------
-f1d_cpm = np.fft.fftshift(np.fft.fftfreq(N, d=dx))  # [ciclos/metro] centrado
+# --------------------------- Malla de frecuencia -----------------------
+f1d_cpm = np.fft.fftshift(np.fft.fftfreq(N, d=dx))
 FX_cpm, FY_cpm = np.meshgrid(f1d_cpm, f1d_cpm, indexing="xy")
-
-# (informativo)
 delta_f_cpm = 1.0/(N*dx)
 fny_cpm     = 1.0/(2.0*dx)
 
-# ----------------------------------------------------------------------
-# Abertura cuadrada: máscara binaria COMPLEJA en la malla (X, Y)
-# ----------------------------------------------------------------------
-def mascara_abertura_cuadrada(X: np.ndarray,
-                              Y: np.ndarray,
-                              lado_m: float,
-                              centro_m: tuple[float, float] = (0.0, 0.0),
-                              amplitud_compleja: complex = 1.0 + 0.0j) -> np.ndarray:
-    """
-    Devuelve U0(x,y) COMPLEJO: amplitud_compleja dentro del cuadrado, 0 fuera.
-    X, Y y 'lado_m' en metros. 'centro_m' permite desplazar la abertura.
-    """
+# --------------------------- Abertura cuadrada -------------------------
+def mascara_abertura_cuadrada(X, Y, lado_m, centro_m=(0.0, 0.0), amplitud_compleja=1.0+0.0j):
     x0_m, y0_m = centro_m
     semi = lado_m/2.0
     dentro = (np.abs(X - x0_m) <= semi) & (np.abs(Y - y0_m) <= semi)
@@ -65,55 +43,46 @@ def mascara_abertura_cuadrada(X: np.ndarray,
     U0[dentro] = amplitud_compleja
     return U0
 
-U0 = mascara_abertura_cuadrada(X, Y, lado_m=lado_abertura_m,
-                               centro_m=centro_abertura_m,
-                               amplitud_compleja=amplitud_interior)
+U0 = mascara_abertura_cuadrada(X, Y, lado_abertura_m, centro_abertura_m, amplitud_interior)
 
-# ----------------------------------------------------------------------
-# PARTE 3 — FFT centrada (helpers)
-#   U(x,y)  -> A(fx,fy) : fft2_centrada
-#   A(fx,fy)-> U(x,y)   : ifft2_centrada
-# ----------------------------------------------------------------------
-def fft2_centrada(u_xy: np.ndarray) -> np.ndarray:
-    """U(x,y) -> A(fx,fy) con DC en el centro."""
-    return np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(u_xy)))
+# --------------------------- FFT centrada --------------------------------
+def fft2_centrada(u_xy):  return np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(u_xy)))
+def ifft2_centrada(A_f):  return np.fft.fftshift(np.fft.ifft2(np.fft.ifftshift(A_f)))
+A0 = fft2_centrada(U0)
 
-def ifft2_centrada(A_f: np.ndarray) -> np.ndarray:
-    """A(fx,fy) -> U(x,y) con DC en el centro."""
-    return np.fft.fftshift(np.fft.ifft2(np.fft.ifftshift(A_f)))
+# --------------------------- Propagador ASM ------------------------------
+def calcular_kz_radpm(FX_cpm, FY_cpm, lam_m):
+    return 2.0*np.pi * np.sqrt((1.0/lam_m**2) - (FX_cpm**2 + FY_cpm**2) + 0j)
 
-A0 = fft2_centrada(U0)  # espectro en z=0
-
-# ----------------------------------------------------------------------
-# PARTE 4 — Propagador ASM y propagación a z fijo
-#   k_z = 2π * sqrt( 1/λ^2 - (fx^2 + fy^2) )
-#   H   = exp( i * z * k_z )
-#   U_z = IFFT{ A0 * H }
-# ----------------------------------------------------------------------
-def calcular_kz_radpm(FX_cpm: np.ndarray,
-                      FY_cpm: np.ndarray,
-                      longitud_onda_m: float) -> np.ndarray:
-    """
-    k_z(fx,fy) en [rad/m], con FX,FY en [ciclos/m]. Incluye modos evanescentes.
-    """
-    return 2.0*np.pi * np.sqrt((1.0/longitud_onda_m**2) - (FX_cpm**2 + FY_cpm**2) + 0j)
-
-def transfer_function_ASM(kz_radpm: np.ndarray, z_m: float) -> np.ndarray:
-    """H(fx,fy; z) = exp(i * z * k_z)."""
+def transfer_function_ASM(kz_radpm, z_m):
     return np.exp(1j * z_m * kz_radpm)
 
 kz_radpm = calcular_kz_radpm(FX_cpm, FY_cpm, longitud_onda_m)
-z_m      = float(fraccion_z_de_zmax) * z_max_m
-print(z_max_m)
-H = transfer_function_ASM(kz_radpm, z_m)
-U_z = ifft2_centrada(A0 * H)
-I_z = np.abs(U_z)**2
 
-# ----------------------------------------------------------------------
-# PARTE 5 — Gráficas
-# ----------------------------------------------------------------------
+# ---- Límite recomendado de z (anti-aliasing) y z inicial
+z_max_recomendado_m = (N//2) * (dx**2) / longitud_onda_m
+z_max_slider_m      = min(float(z_max_m), float(z_max_recomendado_m))
+z_m                 = float(fraccion_z_de_zmax) * z_max_slider_m
+
+# --------------------------- Helpers de visualización --------------------
 extent_mm = [x[0]*1e3, x[-1]*1e3, y[0]*1e3, y[-1]*1e3]
+medio_mm = (N//2) * dx * 1e3
+ancho_mm_zoom = medio_mm / float(zoom_vista)
 
+def preparar_para_mostrar(I):
+    """
+    Devuelve la imagen a mostrar:
+    - lineal: I
+    - log: 10*log10(I/Imax) con recorte a [-rango_dB, 0]
+    """
+    if usar_escala_log:
+        In = I / (I.max() + 1e-16)
+        IdB = 10.0*np.log10(In + 1e-16)
+        return np.clip(IdB, -rango_dB, 0.0)
+    else:
+        return I
+
+# --------------------------- Plots ---------------------------------------
 if mostrar_abertura:
     plt.figure()
     plt.title("Abertura cuadrada — amplitud (z = 0)")
@@ -121,20 +90,57 @@ if mostrar_abertura:
     plt.xlabel("x (mm)"); plt.ylabel("y (mm)")
     plt.colorbar(label="Amplitud"); plt.tight_layout()
 
-plt.figure()
-plt.title(f"ASM — Intensidad |U(x,y;z)|^2   z = {z_m*1e3:.2f} mm")
-plt.imshow(I_z, extent=extent_mm)
-plt.xlabel("x (mm)"); plt.ylabel("y (mm)")
-plt.colorbar(label="Intensidad (u.a.)")
-plt.tight_layout()
+fig, ax = plt.subplots()
+plt.subplots_adjust(bottom=0.22)
+
+# Intensidad inicial
+H0  = transfer_function_ASM(kz_radpm, z_m)
+U_z = ifft2_centrada(A0 * H0)
+I_z = np.abs(U_z)**2
+I_show = preparar_para_mostrar(I_z)
+
+im = ax.imshow(I_show, extent=extent_mm)
+ax.set_xlabel("x (mm)"); ax.set_ylabel("y (mm)")
+ax.set_title(f"ASM — Intensidad {('log(dB)' if usar_escala_log else '|U|^2')}   z = {z_m*1e3:.2f} mm")
+# fijamos límites de color si es log
+if usar_escala_log: im.set_clim(-rango_dB, 0.0)
+# aplicamos zoom visual
+ax.set_xlim(-ancho_mm_zoom, ancho_mm_zoom)
+ax.set_ylim(-ancho_mm_zoom, ancho_mm_zoom)
+cbar = fig.colorbar(im, ax=ax, label=("dB" if usar_escala_log else "Intensidad (u.a.)"))
+
+# Slider de z (mm)
+ax_z = plt.axes([0.12, 0.08, 0.76, 0.04])
+z_slider = Slider(ax=ax_z, label="z (mm)", valmin=0.0, valmax=z_max_slider_m*1e3, valinit=z_m*1e3)
+
+def on_z_change(_):
+    z_now_m = z_slider.val * 1e-3
+    H = transfer_function_ASM(kz_radpm, z_now_m)
+    Uz = ifft2_centrada(A0 * H)
+    I  = np.abs(Uz)**2
+    I_disp = preparar_para_mostrar(I)
+
+    im.set_data(I_disp)
+    if usar_escala_log:
+        im.set_clim(-rango_dB, 0.0)
+    else:
+        im.set_clim(vmin=float(I_disp.min()), vmax=float(I_disp.max()))
+
+    ax.set_title(f"ASM — Intensidad {('log(dB)' if usar_escala_log else '|U|^2')}   z = {z_now_m*1e3:.2f} mm")
+    # mantener el zoom
+    ax.set_xlim(-ancho_mm_zoom, ancho_mm_zoom)
+    ax.set_ylim(-ancho_mm_zoom, ancho_mm_zoom)
+    fig.canvas.draw_idle()
+
+z_slider.on_changed(on_z_change)
 plt.show()
 
-# ----------------------------------------------------------------------
-# PARTE 6 — Resumen por consola (útil para verificar muestreo)
-# ----------------------------------------------------------------------
+# --------------------------- Resumen CLI -----------------------------------
 print("=== Resumen ===")
 print(f"N = {N}, dx = {dx:.3e} m  ->  Lx = Ly = {Lx:.3e} m")
-print(f"λ = {longitud_onda_m:.3e} m, lado = {lado_abertura_m:.3e} m, centro = {centro_abertura_m}")
+print(f"λ = {longitud_onda_m:.3e} m, lado = {lado_abertura_m:.3e} m")
 print(f"Δf = {delta_f_cpm:.6e} ciclos/m  |  f_Nyquist = {fny_cpm:.6e} ciclos/m")
-print(f"z_max ≈ (N/2)·dx²/λ = {z_max_m:.3e} m  ({z_max_m*1e3:.3f} mm)")
-print(f"z = {z_m:.3e} m  ({z_m*1e3:.3f} mm)  = {fraccion_z_de_zmax*100:.1f}% de z_max")
+print(f"z_max (recomendado) = {z_max_recomendado_m:.3e} m  ({z_max_recomendado_m*1e3:.3f} mm)")
+print(f"z_max (slider)      = {z_max_slider_m:.3e} m  ({z_max_slider_m*1e3:.3f} mm)")
+print(f"z inicial           = {z_m:.3e} m  ({z_m*1e3:.3f} mm)")
+print(f"zoom_vista = {zoom_vista}×  |  escala_log = {usar_escala_log}  (rango = {rango_dB} dB)")
