@@ -3,10 +3,10 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
 # ======================================================================
-# CONFIGURACIÓN — modifica aquí tus parámetros principales
+# CONFIGURACIÓN — parámetros principales
 # ======================================================================
 z_max_m  = 200                 # [m] tope deseado del slider (se limita por z_max_recomendado)
-N                   = 2048
+N                   = 2048     # Numero de muestras
 dx                  = 13e-6    # [m/píxel]
 longitud_onda_m     = 532e-9   # [m]
 lado_abertura_m     = 100e-6   # [m]
@@ -15,7 +15,7 @@ amplitud_interior   = 1.0 + 0.0j
 fraccion_z_de_zmax  = 0.4      # z inicial = fracción * z_max_slider
 mostrar_abertura    = True
 
-# NUEVO: controles de visualización
+#Controles de visualización
 zoom_vista          = 3.0      # >1: acerca la vista (3× recomendado para z pequeños)
 usar_escala_log     = True     # True -> mostrar 10*log10(I/Imax)
 rango_dB            = 40.0     # dinámica para la vista log: [-rango_dB, 0] dB
@@ -50,7 +50,7 @@ def fft2_centrada(u_xy):  return np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(u_
 def ifft2_centrada(A_f):  return np.fft.fftshift(np.fft.ifft2(np.fft.ifftshift(A_f)))
 A0 = fft2_centrada(U0)
 
-# --------------------------- Propagador ASM ------------------------------
+# --------------------------- Propagador ASM ANGULAR SPECTRUM METHOD ------------------------------
 def calcular_kz_radpm(FX_cpm, FY_cpm, lam_m):
     return 2.0*np.pi * np.sqrt((1.0/lam_m**2) - (FX_cpm**2 + FY_cpm**2) + 0j)
 
