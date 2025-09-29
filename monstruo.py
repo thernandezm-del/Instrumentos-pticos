@@ -4,7 +4,7 @@ import imageio.v3 as iio
 
 # =================== CONFIGURACIÓN (según enunciado) ===================
 E_NUM       = 3                       # <-- tu número de equipo: transm_E03.png
-MASK_PATH   = f"Transm_E03.png"
+MASK_PATH   = f"transm_E{E_NUM:02d}.png"
 Lx_mm       = 5.8                     # ancho físico de la transmitancia en x [mm]
 lam         = 633e-9                  # longitud de onda [m] (633 nm)
 Z_LIST_MM   = [130, 180, 210, 280, 330, 380]  # z a simular (mm)
